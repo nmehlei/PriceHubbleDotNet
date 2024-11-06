@@ -1,0 +1,1 @@
+Source: https://docs.pricehubble.com/types#property
