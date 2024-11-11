@@ -1,5 +1,5 @@
 using PriceHubble.Client.Auth;
-using PriceHubble.Client.Valuation;
+using PriceHubble.Client.Valuations;
 
 namespace PriceHubble.Client
 {

@@ -1,4 +1,4 @@
-namespace PriceHubble.Client.Valuation
+namespace PriceHubble.Client.ValueTypes
 {
     public enum Confidence
     {

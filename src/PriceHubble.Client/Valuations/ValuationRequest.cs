@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using PriceHubble.Client.ValueTypes;
 
-namespace PriceHubble.Client.Valuation
+namespace PriceHubble.Client.Valuations
 {
     public class ValuationRequest
     {
