@@ -40,4 +40,4 @@ jobs:
     - name: Pack
       run: dotnet pack --configuration Release -p:UseGitVersion=true -p:CIBuild=true
     - name: Publish
-      run: dotnet nuget push src/PriceHubble.Client/bin/Release/PriceHubbleDotNet.${{ steps.gitversion.outputs.MajorMinorPatch }}.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+      run: dotnet nuget push src/PriceHubble.Client/bin/Release/PriceHubbleDotNet.${{ steps.gitversion.outputs.SemVer }}.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
