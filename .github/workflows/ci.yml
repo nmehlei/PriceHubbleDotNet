@@ -25,7 +25,10 @@ jobs:
       with:
         versionSpec: '6.x'
     - name: Determine Version
+      id: gitversion
       uses: gittools/actions/gitversion/execute@v3.0.0
+      with:
+        additionalArguments: '/updateprojectfiles'
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
@@ -35,4 +38,4 @@ jobs:
     - name: Pack
       run: dotnet pack --configuration Release -p:UseGitVersion=true -p:CIBuild=true
     - name: Publish
-      run: dotnet nuget push --configuration Release Contoso.08.28.22.001.Test.1.0.0.nupkg --api-key qz2jga8pl3dvn2akksyquwcs9ygggg4exypy3bhxy6w6x6 --source https://api.nuget.org/v3/index.json
+      run: dotnet nuget push --configuration Release PriceHubbleDotNet.${{ steps.gitversion.outputs.MajorMinorPatch }}.nupkg --api-key qz2jga8pl3dvn2akksyquwcs9ygggg4exypy3bhxy6w6x6 --source https://api.nuget.org/v3/index.json
