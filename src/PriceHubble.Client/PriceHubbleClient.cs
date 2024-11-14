@@ -2,21 +2,29 @@ using System.Net;
 using PriceHubble.Client.Auth;
 using PriceHubble.Client.Options;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text;
 using PriceHubble.Client.Valuations;
+using Microsoft.Extensions.Logging;
+using System.Threading;
 
 namespace PriceHubble.Client
 {
-    public class PriceHubbleClient
+    public class PriceHubbleClient : IPriceHubbleClient
     {
-        public PriceHubbleClient(PriceHubbleOptions options, TimeSpan? defaultRequestTimeout = null)
+        public PriceHubbleClient(ILogger<PriceHubbleClient> logger, PriceHubbleOptions options, TimeSpan? defaultRequestTimeout = null)
         {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _options = options;
 
             _defaultRequestTimeout = defaultRequestTimeout ?? TimeSpan.FromSeconds(10);
 
+            logger.LogDebug("Test");
+
             InitializeClient();
         }
+
+        private ILogger<PriceHubbleClient> _logger;
 
         private readonly PriceHubbleOptions _options;
         private HttpClient _httpClient;
@@ -28,6 +36,19 @@ namespace PriceHubble.Client
         private string? _accessToken = null;
         private DateTime? _accessTokenExpiryDate;
 
+        private static readonly Uri DefaultBaseAddress = new Uri("https://api.pricehubble.com", UriKind.Absolute);
+
+        private JsonSerializerOptions _serializeOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            Converters =
+            {
+                new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
+            }
+        };
+
         private void InitializeClient()
         {
             var handler = new HttpClientHandler
@@ -37,7 +58,7 @@ namespace PriceHubble.Client
 
             _httpClient = new HttpClient(handler)
             {
-                BaseAddress = _options.BaseAddress,
+                BaseAddress = _options.BaseAddress ?? DefaultBaseAddress,
                 Timeout = _defaultRequestTimeout
             };
         }
@@ -68,12 +89,15 @@ namespace PriceHubble.Client
             // NOTE: reduce by 5 minutes to minimize risk of still using an expired token,
             // e.g. due to clock mismatch or processing time
             _accessTokenExpiryDate = DateTime.UtcNow.AddSeconds(expiryOffset).AddMinutes(-5);
+
+            _logger.LogDebug("Updated cached auth token");
         }
 
         private async Task<string> GetAccessToken()
         {
             if(!IsAccessTokenCachedAndValid())
             {
+                _logger.LogDebug("Cached auth token missing or expired, requesting new token");
                 var authResult = await AuthAsync(GenerateAuthRequest());
                 UpdateCachedAuthToken(authResult.AccessToken, authResult.ExpiresIn.Value);
             }
@@ -88,34 +112,81 @@ namespace PriceHubble.Client
             content.Headers.Add(AuthorizationHeaderName, header);
         }
 
-        public async Task<AuthResponse> AuthAsync(AuthRequest request)
+        public async Task<AuthResponse> AuthAsync(AuthRequest request, CancellationToken? cancellationToken = null)
         {
-            var stringContent = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, UsedMediaType);
+            _logger.LogDebug("Invoking Auth");
+
+            // NOTE: For some unknown reason, the formatting for the auth endpoint is snake_case whereas for the other endpoints it is camelCase
+            var authSerializeOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                WriteIndented = false
+            };
+
+            var jsonString = JsonSerializer.Serialize(request, authSerializeOptions);
+            var stringContent = new StringContent(jsonString, Encoding.UTF8, UsedMediaType);
             var responseRaw = await _httpClient.PostAsync("/auth/login/credentials", stringContent);
 
             if (!responseRaw.IsSuccessStatusCode)
             {
+                Console.WriteLine(jsonString);
+                Console.WriteLine(JsonSerializer.Serialize(responseRaw, authSerializeOptions));
                 throw new Exception();
             }
 
             var responseJson = await responseRaw.Content.ReadAsStringAsync();
-            var response = JsonSerializer.Deserialize<AuthResponse>(responseJson);
+            Console.WriteLine(responseJson);
+            var response = JsonSerializer.Deserialize<AuthResponse>(responseJson, authSerializeOptions);
             return response;
         }
 
-        public async Task<ValuationResponse> ValuationAsync(ValuationRequest request)
+        public async Task<ValuationResponse> ValuationAsync(ValuationRequest request, CancellationToken? cancellationToken = null)
         {
-            var stringContent = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, UsedMediaType);
-            await AttachAccessToken(stringContent);
-            var responseRaw = await _httpClient.PostAsync("/api/v1/valuation/property_value", stringContent);
+            _logger.LogDebug("Invoking Valuation");
+
+            const string uri = "/api/v1/valuation/property_value";
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
+
+            var stringContent = new StringContent(JsonSerializer.Serialize(request, _serializeOptions), Encoding.UTF8, UsedMediaType);
+            httpRequest.Content = stringContent;
+            httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
+
+            var responseRaw = await _httpClient.SendAsync(httpRequest);
 
             if (!responseRaw.IsSuccessStatusCode)
             {
+                Console.WriteLine(JsonSerializer.Serialize(responseRaw, _serializeOptions));
                 throw new Exception();
             }
 
             var responseJson = await responseRaw.Content.ReadAsStringAsync();
-            var response = JsonSerializer.Deserialize<ValuationResponse>(responseJson);
+            var response = JsonSerializer.Deserialize<ValuationResponse>(responseJson, _serializeOptions);
+            return response;
+        }
+
+        public async Task<ValuationLightResponse> ValuationLightAsync(ValuationLightRequest request, CancellationToken? cancellationToken = null)
+        {
+            _logger.LogDebug("Invoking ValuationLight");
+
+            const string uri = "/api/v1/valuation/property_value_light";
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
+
+            var serializedJson = JsonSerializer.Serialize(request, _serializeOptions);
+            var stringContent = new StringContent(serializedJson, Encoding.UTF8, UsedMediaType);
+            httpRequest.Content = stringContent;
+            httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
+            Console.WriteLine(serializedJson);
+
+            var responseRaw = await _httpClient.SendAsync(httpRequest);
+
+            if (!responseRaw.IsSuccessStatusCode)
+            {
+                Console.WriteLine(JsonSerializer.Serialize(responseRaw, _serializeOptions));
+                throw new Exception();
+            }
+
+            var responseJson = await responseRaw.Content.ReadAsStringAsync();
+            var response = JsonSerializer.Deserialize<ValuationLightResponse>(responseJson, _serializeOptions);
             return response;
         }
     }

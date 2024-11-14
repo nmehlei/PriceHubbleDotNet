@@ -2,7 +2,7 @@ namespace PriceHubble.Client.ValueTypes
 {
     public class Coordinates
     {
-        public float? Latitude { get; set; }
-        public float? Longitude { get; set; }
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
     }
 }
