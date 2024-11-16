@@ -7,6 +7,7 @@ using System.Text;
 using PriceHubble.Client.Valuations;
 using Microsoft.Extensions.Logging;
 using System.Threading;
+using PriceHubble.Client.Results;
 
 namespace PriceHubble.Client
 {
@@ -129,18 +130,16 @@ namespace PriceHubble.Client
 
             if (!responseRaw.IsSuccessStatusCode)
             {
-                Console.WriteLine(jsonString);
-                Console.WriteLine(JsonSerializer.Serialize(responseRaw, authSerializeOptions));
                 throw new Exception();
             }
 
             var responseJson = await responseRaw.Content.ReadAsStringAsync();
-            Console.WriteLine(responseJson);
+
             var response = JsonSerializer.Deserialize<AuthResponse>(responseJson, authSerializeOptions);
             return response;
         }
 
-        public async Task<ValuationResponse> ValuationAsync(ValuationRequest request, CancellationToken? cancellationToken = null)
+        public async Task<ServiceResult<ValuationResponse>> ValuationAsync(ValuationRequest request, CancellationToken? cancellationToken = null)
         {
             _logger.LogDebug("Invoking Valuation");
 
@@ -155,8 +154,9 @@ namespace PriceHubble.Client
 
             if (!responseRaw.IsSuccessStatusCode)
             {
-                Console.WriteLine(JsonSerializer.Serialize(responseRaw, _serializeOptions));
-                throw new Exception();
+                var errorResult = await responseRaw.Content.ReadAsStringAsync();
+                _logger.LogError("Error during ValuationAsync: {ErrorDetails}", errorResult);
+                return ServiceResult<ValuationResponse>.WithServerError(new ServerError(responseRaw.StatusCode.ToString(), errorResult));
             }
 
             var responseJson = await responseRaw.Content.ReadAsStringAsync();
@@ -164,7 +164,7 @@ namespace PriceHubble.Client
             return response;
         }
 
-        public async Task<ValuationLightResponse> ValuationLightAsync(ValuationLightRequest request, CancellationToken? cancellationToken = null)
+        public async Task<ServiceResult<ValuationLightResponse>> ValuationLightAsync(ValuationLightRequest request, CancellationToken? cancellationToken = null)
         {
             _logger.LogDebug("Invoking ValuationLight");
 
@@ -175,14 +175,14 @@ namespace PriceHubble.Client
             var stringContent = new StringContent(serializedJson, Encoding.UTF8, UsedMediaType);
             httpRequest.Content = stringContent;
             httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
-            Console.WriteLine(serializedJson);
 
             var responseRaw = await _httpClient.SendAsync(httpRequest);
 
             if (!responseRaw.IsSuccessStatusCode)
             {
-                Console.WriteLine(JsonSerializer.Serialize(responseRaw, _serializeOptions));
-                throw new Exception();
+                var errorResult = await responseRaw.Content.ReadAsStringAsync();
+                _logger.LogError("Error during ValuationLightAsync: {ErrorDetails}", errorResult);
+                return ServiceResult<ValuationLightResponse>.WithServerError(new ServerError(responseRaw.StatusCode.ToString(), errorResult));
             }
 
             var responseJson = await responseRaw.Content.ReadAsStringAsync();

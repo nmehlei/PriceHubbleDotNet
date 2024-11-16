@@ -73,9 +73,18 @@ class Program
                 CountryCode = "DE"
             };
 
-            var valuationLightResponse = priceHubbleClient.ValuationLightAsync(exampleValuationLightRequest).Result;
+            var valuationLightResult = priceHubbleClient.ValuationLightAsync(exampleValuationLightRequest).Result;
 
-            PrintValuations(valuationLightResponse);
+            if(valuationLightResult.IsSuccess)
+            {
+                var valuationLightResponse = valuationLightResult.AsSuccess;
+
+                PrintValuations(valuationLightResponse);
+            }
+            else
+            {
+                Console.WriteLine("Request failed");
+            }
 
             Console.ReadLine();
         }
