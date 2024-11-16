@@ -46,7 +46,7 @@ namespace PriceHubble.Client
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
             Converters =
             {
-                new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
+                new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower)
             }
         };
 
