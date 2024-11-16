@@ -124,8 +124,11 @@ namespace PriceHubble.Client
                 WriteIndented = false
             };
 
-            var jsonString = JsonSerializer.Serialize(request, authSerializeOptions);
-            var stringContent = new StringContent(jsonString, Encoding.UTF8, UsedMediaType);
+            var jsonBody = JsonSerializer.Serialize(request, authSerializeOptions);
+
+            _logger.LogDebug("Invoking AuthAsync with body {Body}", jsonBody);
+
+            var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
             var responseRaw = await _httpClient.PostAsync("/auth/login/credentials", stringContent);
 
             if (!responseRaw.IsSuccessStatusCode)
@@ -141,12 +144,13 @@ namespace PriceHubble.Client
 
         public async Task<ServiceResult<ValuationResponse>> ValuationAsync(ValuationRequest request, CancellationToken? cancellationToken = null)
         {
-            _logger.LogDebug("Invoking Valuation");
-
+            var jsonBody = JsonSerializer.Serialize(request, _serializeOptions);
             const string uri = "/api/v1/valuation/property_value";
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
 
-            var stringContent = new StringContent(JsonSerializer.Serialize(request, _serializeOptions), Encoding.UTF8, UsedMediaType);
+            _logger.LogDebug("Invoking Valuation with body {Body}", jsonBody);
+
+            var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
             httpRequest.Content = stringContent;
             httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
 
@@ -166,13 +170,13 @@ namespace PriceHubble.Client
 
         public async Task<ServiceResult<ValuationLightResponse>> ValuationLightAsync(ValuationLightRequest request, CancellationToken? cancellationToken = null)
         {
-            _logger.LogDebug("Invoking ValuationLight");
-
+            var jsonBody = JsonSerializer.Serialize(request, _serializeOptions);
             const string uri = "/api/v1/valuation/property_value_light";
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
 
-            var serializedJson = JsonSerializer.Serialize(request, _serializeOptions);
-            var stringContent = new StringContent(serializedJson, Encoding.UTF8, UsedMediaType);
+            _logger.LogDebug("Invoking ValuationLight with body {Body}", jsonBody);
+
+            var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
             httpRequest.Content = stringContent;
             httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
 
