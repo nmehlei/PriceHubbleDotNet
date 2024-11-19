@@ -8,6 +8,8 @@ using PriceHubble.Client.Valuations;
 using Microsoft.Extensions.Logging;
 using System.Threading;
 using PriceHubble.Client.Results;
+using System.Diagnostics;
+using System.Reflection;
 
 namespace PriceHubble.Client
 {
@@ -38,6 +40,20 @@ namespace PriceHubble.Client
         private DateTime? _accessTokenExpiryDate;
 
         private static readonly Uri DefaultBaseAddress = new Uri("https://api.pricehubble.com", UriKind.Absolute);
+
+        private static ActivitySource ActivitySource = InitializeActivitySource();
+
+        private static ActivitySource InitializeActivitySource()
+        {
+            var assembly = Assembly.GetAssembly(typeof(PriceHubbleClient));
+            var fileVersionInfo = FileVersionInfo.GetVersionInfo(assembly.Location);
+            var fileVersion = fileVersionInfo.FileVersion;
+
+            return new ActivitySource(
+                name: "PriceHubble.Client.PriceHubbleClient",
+                version: fileVersion
+            );
+        }
 
         private JsonSerializerOptions _serializeOptions = new JsonSerializerOptions
         {
@@ -73,7 +89,7 @@ namespace PriceHubble.Client
 
         private AuthRequest GenerateAuthRequest()
         {
-            if(string.IsNullOrWhiteSpace(_options.Username) || string.IsNullOrWhiteSpace(_options.Password))
+            if (string.IsNullOrWhiteSpace(_options.Username) || string.IsNullOrWhiteSpace(_options.Password))
                 throw new InvalidOperationException("Credentials were not set in options");
 
             return new AuthRequest()
@@ -96,7 +112,7 @@ namespace PriceHubble.Client
 
         private async Task<string> GetAccessToken()
         {
-            if(!IsAccessTokenCachedAndValid())
+            if (!IsAccessTokenCachedAndValid())
             {
                 _logger.LogDebug("Cached auth token missing or expired, requesting new token");
                 var authResult = await AuthAsync(GenerateAuthRequest());
@@ -115,83 +131,111 @@ namespace PriceHubble.Client
 
         public async Task<AuthResponse> AuthAsync(AuthRequest request, CancellationToken? cancellationToken = null)
         {
-            _logger.LogDebug("Invoking Auth");
-
-            // NOTE: For some unknown reason, the formatting for the auth endpoint is snake_case whereas for the other endpoints it is camelCase
-            var authSerializeOptions = new JsonSerializerOptions
+            using (var activity = ActivitySource.StartActivity("PriceHubble.Auth", ActivityKind.Client))
             {
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-                WriteIndented = false
-            };
+                _logger.LogDebug("Invoking Auth");
 
-            var jsonBody = JsonSerializer.Serialize(request, authSerializeOptions);
+                // NOTE: For some unknown reason, the formatting for the auth endpoint is snake_case whereas for the other endpoints it is camelCase
+                var authSerializeOptions = new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                    WriteIndented = false
+                };
 
-            _logger.LogDebug("Invoking AuthAsync with body {Body}", jsonBody);
+                var jsonBody = JsonSerializer.Serialize(request, authSerializeOptions);
 
-            var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
-            var responseRaw = await _httpClient.PostAsync("/auth/login/credentials", stringContent);
+                _logger.LogDebug("Invoking AuthAsync with body {Body}", jsonBody);
 
-            if (!responseRaw.IsSuccessStatusCode)
-            {
-                throw new Exception();
+                var uri = "/auth/login/credentials";
+                activity?.SetTag("uri", uri);
+
+                var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
+                var responseRaw = await _httpClient.PostAsync(uri, stringContent);
+                activity?.SetTag("http.response_code", responseRaw.StatusCode.ToString());
+
+                if (!responseRaw.IsSuccessStatusCode)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error);
+                    throw new Exception();
+                }
+
+                activity?.SetStatus(ActivityStatusCode.Ok);
+
+                var responseJson = await responseRaw.Content.ReadAsStringAsync();
+
+                var response = JsonSerializer.Deserialize<AuthResponse>(responseJson, authSerializeOptions);
+                return response;
             }
-
-            var responseJson = await responseRaw.Content.ReadAsStringAsync();
-
-            var response = JsonSerializer.Deserialize<AuthResponse>(responseJson, authSerializeOptions);
-            return response;
         }
 
         public async Task<ServiceResult<ValuationResponse>> ValuationAsync(ValuationRequest request, CancellationToken? cancellationToken = null)
         {
-            var jsonBody = JsonSerializer.Serialize(request, _serializeOptions);
-            const string uri = "/api/v1/valuation/property_value";
-            var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
-
-            _logger.LogDebug("Invoking Valuation with body {Body}", jsonBody);
-
-            var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
-            httpRequest.Content = stringContent;
-            httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
-
-            var responseRaw = await _httpClient.SendAsync(httpRequest);
-
-            if (!responseRaw.IsSuccessStatusCode)
+            using (var activity = ActivitySource.StartActivity("PriceHubble.Valuation", ActivityKind.Client))
             {
-                var errorResult = await responseRaw.Content.ReadAsStringAsync();
-                _logger.LogError("Error during ValuationAsync: {ErrorDetails}", errorResult);
-                return ServiceResult<ValuationResponse>.WithServerError(new ServerError(responseRaw.StatusCode.ToString(), errorResult));
-            }
+                var jsonBody = JsonSerializer.Serialize(request, _serializeOptions);
+                const string uri = "/api/v1/valuation/property_value";
+                var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
 
-            var responseJson = await responseRaw.Content.ReadAsStringAsync();
-            var response = JsonSerializer.Deserialize<ValuationResponse>(responseJson, _serializeOptions);
-            return response;
+                activity?.SetTag("uri", uri);
+
+                _logger.LogDebug("Invoking Valuation with body {Body}", jsonBody);
+
+                var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
+                httpRequest.Content = stringContent;
+                httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
+
+                var responseRaw = await _httpClient.SendAsync(httpRequest);
+                activity?.SetTag("http.response_code", responseRaw.StatusCode.ToString());
+
+                if (!responseRaw.IsSuccessStatusCode)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error);
+                    var errorResult = await responseRaw.Content.ReadAsStringAsync();
+                    _logger.LogError("Error during ValuationAsync: {ErrorDetails}", errorResult);
+                    return ServiceResult<ValuationResponse>.WithServerError(new ServerError(responseRaw.StatusCode.ToString(), errorResult));
+                }
+
+                activity?.SetStatus(ActivityStatusCode.Ok);
+
+                var responseJson = await responseRaw.Content.ReadAsStringAsync();
+                var response = JsonSerializer.Deserialize<ValuationResponse>(responseJson, _serializeOptions);
+                return response;
+            }
         }
 
         public async Task<ServiceResult<ValuationLightResponse>> ValuationLightAsync(ValuationLightRequest request, CancellationToken? cancellationToken = null)
         {
-            var jsonBody = JsonSerializer.Serialize(request, _serializeOptions);
-            const string uri = "/api/v1/valuation/property_value_light";
-            var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
-
-            _logger.LogDebug("Invoking ValuationLight with body {Body}", jsonBody);
-
-            var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
-            httpRequest.Content = stringContent;
-            httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
-
-            var responseRaw = await _httpClient.SendAsync(httpRequest);
-
-            if (!responseRaw.IsSuccessStatusCode)
+            using (var activity = ActivitySource.StartActivity("PriceHubble.ValuationLight", ActivityKind.Client))
             {
-                var errorResult = await responseRaw.Content.ReadAsStringAsync();
-                _logger.LogError("Error during ValuationLightAsync: {ErrorDetails}", errorResult);
-                return ServiceResult<ValuationLightResponse>.WithServerError(new ServerError(responseRaw.StatusCode.ToString(), errorResult));
-            }
+                var jsonBody = JsonSerializer.Serialize(request, _serializeOptions);
+                const string uri = "/api/v1/valuation/property_value_light";
+                var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
 
-            var responseJson = await responseRaw.Content.ReadAsStringAsync();
-            var response = JsonSerializer.Deserialize<ValuationLightResponse>(responseJson, _serializeOptions);
-            return response;
+                activity?.SetTag("uri", uri);
+
+                _logger.LogDebug("Invoking ValuationLight with body {Body}", jsonBody);
+
+                var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
+                httpRequest.Content = stringContent;
+                httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
+
+                var responseRaw = await _httpClient.SendAsync(httpRequest);
+                activity?.SetTag("http.response_code", responseRaw.StatusCode.ToString());
+
+                if (!responseRaw.IsSuccessStatusCode)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error);
+                    var errorResult = await responseRaw.Content.ReadAsStringAsync();
+                    _logger.LogError("Error during ValuationLightAsync: {ErrorDetails}", errorResult);
+                    return ServiceResult<ValuationLightResponse>.WithServerError(new ServerError(responseRaw.StatusCode.ToString(), errorResult));
+                }
+
+                activity?.SetStatus(ActivityStatusCode.Ok);
+
+                var responseJson = await responseRaw.Content.ReadAsStringAsync();
+                var response = JsonSerializer.Deserialize<ValuationLightResponse>(responseJson, _serializeOptions);
+                return response;
+            }
         }
     }
 }
