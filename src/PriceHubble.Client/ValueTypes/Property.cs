@@ -114,5 +114,29 @@ namespace PriceHubble.Client.ValueTypes
         /// min: 1, max: 5
         /// </summary>
         public int? NumberOfBathrooms { get; set; }
+
+        /// <summary>
+        /// Garage spaces
+        /// min: 0, max: 6
+        /// CH max: 100
+        /// </summary>
+        public int? NumberOfIndoorParkingSpaces { get; set; }
+
+        /// <summary>
+        /// Parking spaces
+        /// min: 0, max: 6
+        /// CH max: 100
+        /// </summary>
+        public int? NumberOfOutdoorParkingSpaces { get; set; }
+
+        /// <summary>
+        /// Conditions
+        /// </summary>
+        public Conditions? Condition { get; set; }
+
+        /// <summary>
+        /// Qualities
+        /// </summary>
+        public Qualities? Quality { get; set; }
     }
 }
