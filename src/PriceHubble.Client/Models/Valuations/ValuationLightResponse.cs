@@ -1,10 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using PriceHubble.Client.ValueTypes;
 
-namespace PriceHubble.Client.Valuations
+namespace PriceHubble.Client.Models.Valuations
 {
     public class ValuationLightResponse
     {

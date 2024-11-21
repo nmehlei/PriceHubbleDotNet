@@ -1,6 +1,6 @@
 using PriceHubble.Client.ValueTypes;
 
-namespace PriceHubble.Client.Valuations
+namespace PriceHubble.Client.Models.Valuations
 {
     public class ValuationRequest
     {

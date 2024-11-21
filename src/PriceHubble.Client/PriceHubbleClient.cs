@@ -4,12 +4,13 @@ using PriceHubble.Client.Options;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text;
-using PriceHubble.Client.Valuations;
+using PriceHubble.Client.Models.Valuations;
 using Microsoft.Extensions.Logging;
-using System.Threading;
 using PriceHubble.Client.Results;
 using System.Diagnostics;
 using System.Reflection;
+using PriceHubble.Client.Observability;
+using PriceHubble.Client.Models.Dossiers;
 
 namespace PriceHubble.Client
 {
@@ -50,7 +51,7 @@ namespace PriceHubble.Client
             var fileVersion = fileVersionInfo.FileVersion;
 
             return new ActivitySource(
-                name: "PriceHubble.Client.PriceHubbleClient",
+                name: PriceHubbleObservabilityConstants.ActivitySourceName,
                 version: fileVersion
             );
         }
@@ -234,6 +235,111 @@ namespace PriceHubble.Client
 
                 var responseJson = await responseRaw.Content.ReadAsStringAsync();
                 var response = JsonSerializer.Deserialize<ValuationLightResponse>(responseJson, _serializeOptions);
+                return response;
+            }
+        }
+
+        public async Task<ServiceResult<DossierCreationResponse>> DossierCreationAsync(DossierCreationRequest request, CancellationToken? cancellationToken = null)
+        {
+            using (var activity = ActivitySource.StartActivity("PriceHubble.DossierCreation", ActivityKind.Client))
+            {
+                var jsonBody = JsonSerializer.Serialize(request, _serializeOptions);
+                const string uri = "/api/v1/dossiers";
+                var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
+
+                activity?.SetTag("uri", uri);
+
+                _logger.LogDebug("Invoking DossierCreation with uri {Uri} and body {Body}", uri, jsonBody);
+
+                var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
+                httpRequest.Content = stringContent;
+                httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
+
+                var responseRaw = await _httpClient.SendAsync(httpRequest);
+                activity?.SetTag("http.response_code", responseRaw.StatusCode.ToString());
+
+                if (!responseRaw.IsSuccessStatusCode)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error);
+                    var errorResult = await responseRaw.Content.ReadAsStringAsync();
+                    _logger.LogError("Error during DossierCreationAsync: {ErrorDetails}", errorResult);
+                    return ServiceResult<DossierCreationResponse>.WithServerError(new ServerError(responseRaw.StatusCode.ToString(), errorResult));
+                }
+
+                activity?.SetStatus(ActivityStatusCode.Ok);
+
+                var responseJson = await responseRaw.Content.ReadAsStringAsync();
+                var response = JsonSerializer.Deserialize<DossierCreationResponse>(responseJson, _serializeOptions);
+                return response;
+            }
+        }
+
+        public async Task<ServiceResult<DossierValuationResponse>> DossierValuationAsync(string dossierId, DossierValuationRequest request, CancellationToken? cancellationToken = null)
+        {
+            using (var activity = ActivitySource.StartActivity("PriceHubble.DossierValuation", ActivityKind.Client))
+            {
+                var jsonBody = JsonSerializer.Serialize(request, _serializeOptions);
+                string uri = string.Format("/api/v1/dossiers/{0}/valuation", dossierId);
+                var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
+
+                activity?.SetTag("uri", uri);
+
+                _logger.LogDebug("Invoking DossierValuation with uri {Uri} and body {Body}", uri, jsonBody);
+
+                var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
+                httpRequest.Content = stringContent;
+                httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
+
+                var responseRaw = await _httpClient.SendAsync(httpRequest);
+                activity?.SetTag("http.response_code", responseRaw.StatusCode.ToString());
+
+                if (!responseRaw.IsSuccessStatusCode)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error);
+                    var errorResult = await responseRaw.Content.ReadAsStringAsync();
+                    _logger.LogError("Error during DossierValuationAsync: {ErrorDetails}", errorResult);
+                    return ServiceResult<DossierValuationResponse>.WithServerError(new ServerError(responseRaw.StatusCode.ToString(), errorResult));
+                }
+
+                activity?.SetStatus(ActivityStatusCode.Ok);
+
+                var responseJson = await responseRaw.Content.ReadAsStringAsync();
+                var response = JsonSerializer.Deserialize<DossierValuationResponse>(responseJson, _serializeOptions);
+                return response;
+            }
+        }
+
+        public async Task<ServiceResult<DossierSharingResponse>> DossierSharingAsync(DossierSharingRequest request, CancellationToken? cancellationToken = null)
+        {
+            using (var activity = ActivitySource.StartActivity("PriceHubble.DossierSharing", ActivityKind.Client))
+            {
+                var jsonBody = JsonSerializer.Serialize(request, _serializeOptions);
+                const string uri = "/api/v1/dossiers/links";
+                var httpRequest = new HttpRequestMessage(HttpMethod.Post, uri);
+
+                activity?.SetTag("uri", uri);
+
+                _logger.LogDebug("Invoking DossierSharing with uri {Uri} and body {Body}", uri, jsonBody);
+
+                var stringContent = new StringContent(jsonBody, Encoding.UTF8, UsedMediaType);
+                httpRequest.Content = stringContent;
+                httpRequest.Headers.Add("Authorization", string.Format("Bearer {0}", await GetAccessToken()));
+
+                var responseRaw = await _httpClient.SendAsync(httpRequest);
+                activity?.SetTag("http.response_code", responseRaw.StatusCode.ToString());
+
+                if (!responseRaw.IsSuccessStatusCode)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error);
+                    var errorResult = await responseRaw.Content.ReadAsStringAsync();
+                    _logger.LogError("Error during DossierSharingAsync: {ErrorDetails}", errorResult);
+                    return ServiceResult<DossierSharingResponse>.WithServerError(new ServerError(responseRaw.StatusCode.ToString(), errorResult));
+                }
+
+                activity?.SetStatus(ActivityStatusCode.Ok);
+
+                var responseJson = await responseRaw.Content.ReadAsStringAsync();
+                var response = JsonSerializer.Deserialize<DossierSharingResponse>(responseJson, _serializeOptions);
                 return response;
             }
         }
